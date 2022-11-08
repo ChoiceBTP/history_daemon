@@ -1,15 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type UrlListReq struct {
+	UrlList []string `json:"url_list"`
+}
 
 type HistoryRow struct {
 	id            int
@@ -21,6 +28,8 @@ type HistoryRow struct {
 	hidden        int
 	m             map[string]string // url to classification
 }
+
+const url string = "http://127.0.0.1:5000/process_urls"
 
 func HistoryRoutine() {
 	const file string = "/Users/tanmaygairola/Library/Application Support/Google/Chrome/Default/History"
@@ -55,10 +64,30 @@ func HistoryRoutine() {
 			history = append(history, historyRow)
 
 		}
+		url_list := make([]string, 0)
 		for _, historyRow := range history {
-			fmt.Printf("title: %v, url: %v\n", historyRow.title, historyRow.url)
+			url_list = append(url_list, historyRow.url)
 		}
-		time.Sleep(30 * time.Minute)
+		data, _ := json.Marshal(UrlListReq{UrlList: url_list})
+		dataReader := bytes.NewReader(data)
+		fmt.Println(url_list)
+		req, err := http.NewRequest(http.MethodPost, url, dataReader)
+		if err != nil {
+			fmt.Println(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := http.Client{
+			Timeout: 30 * time.Second,
+		}
+
+		res, err := client.Do(req)
+		if err != nil {
+			fmt.Printf("client: error making http request: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(res)
+		time.Sleep(2 * time.Second)
 	}
 }
 
