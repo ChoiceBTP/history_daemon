@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -29,10 +30,17 @@ type HistoryRow struct {
 	m             map[string]string // url to classification
 }
 
-const url string = "http://127.0.0.1:5000/process_urls"
+type ClassificationResponse struct {
+	url   string
+	class string
+}
+
+const post_url string = "http://127.0.0.1:5000/process_urls"
+const get_classes_url string = "http://127.0.0.1:5000/get_url_classes"
+
+const file string = "/Users/tanmaygairola/Library/Application Support/Google/Chrome/Default/History"
 
 func HistoryRoutine() {
-	const file string = "/Users/tanmaygairola/Library/Application Support/Google/Chrome/Default/History"
 	db, err := sql.Open("sqlite3", file)
 	defer func(db *sql.DB) {
 		err := db.Close()
@@ -71,7 +79,7 @@ func HistoryRoutine() {
 		data, _ := json.Marshal(UrlListReq{UrlList: url_list})
 		dataReader := bytes.NewReader(data)
 		fmt.Println(url_list)
-		req, err := http.NewRequest(http.MethodPost, url, dataReader)
+		req, err := http.NewRequest(http.MethodPost, post_url, dataReader)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -87,15 +95,15 @@ func HistoryRoutine() {
 			os.Exit(1)
 		}
 		fmt.Println(res)
-		time.Sleep(2 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 
 func Server() {
 	mux := http.NewServeMux()
+	// localhost:3333/getHistory?time=20323
 	mux.HandleFunc("/getHistory", getHistory)
 	mux.HandleFunc("/ping", pong)
-
 	http.ListenAndServe(":3333", mux)
 }
 
@@ -104,7 +112,73 @@ func pong(writer http.ResponseWriter, request *http.Request) {
 }
 
 func getHistory(writer http.ResponseWriter, request *http.Request) {
-	io.WriteString(writer, "sent default history for "+request.URL.Query().Get("hour"))
+	db, err := sql.Open("sqlite3", file)
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(db)
+	if err != nil {
+		log.Println(err)
+	}
+	if err != nil {
+		io.WriteString(writer, err.Error())
+	}
+	query := "select * from urls where last_visit_time >" + request.URL.Query().Get("time")
+	fmt.Println(query)
+	rows, _ := db.Query(query)
+
+	history := make([]HistoryRow, 0)
+
+	for rows.Next() {
+		historyRow := HistoryRow{}
+		err := rows.Scan(&historyRow.id,
+			&historyRow.url,
+			&historyRow.title,
+			&historyRow.visitCount,
+			&historyRow.typedCount,
+			&historyRow.lastVisitTime,
+			&historyRow.hidden,
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		history = append(history, historyRow)
+	}
+	//fmt.Println(history)
+	url_list := make([]string, 0)
+	for _, historyRow := range history {
+		url_list = append(url_list, historyRow.url)
+	}
+	data, _ := json.Marshal(UrlListReq{UrlList: url_list})
+	dataReader := bytes.NewReader(data)
+	fmt.Println(url_list)
+	req, err := http.NewRequest(http.MethodPost, get_classes_url, dataReader)
+	if err != nil {
+		fmt.Println(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("client: error making http request: %s\n", err)
+		os.Exit(1)
+	}
+	if err != nil {
+		fmt.Printf("client: error making http request: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(res.Body)
+	//classificationResponse := ClassificationResponse{}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	fmt.Println(string(body))
 }
 
 func main() {
