@@ -38,7 +38,7 @@ type ClassificationResponse struct {
 const post_url string = "http://127.0.0.1:5000/process_urls"
 const get_classes_url string = "http://127.0.0.1:5000/get_url_classes"
 
-const file string = "/Users/tanmaygairola/Library/Application Support/Google/Chrome/Default/History"
+const file string = "C:/Users/jhasa/Desktop/History.sqlite"
 
 func HistoryRoutine() {
 	db, err := sql.Open("sqlite3", file)
@@ -52,7 +52,7 @@ func HistoryRoutine() {
 		log.Println(err)
 	}
 	for {
-		query := "select * from urls order by last_visit_time desc limit 10"
+		query := "select * from urls order by last_visit_time desc limit 50"
 		rows, _ := db.Query(query)
 
 		history := make([]HistoryRow, 0)
@@ -78,7 +78,7 @@ func HistoryRoutine() {
 		}
 		data, _ := json.Marshal(UrlListReq{UrlList: url_list})
 		dataReader := bytes.NewReader(data)
-		fmt.Println(url_list)
+		// fmt.Println(url_list)
 		req, err := http.NewRequest(http.MethodPost, post_url, dataReader)
 		if err != nil {
 			fmt.Println(err)
@@ -95,7 +95,8 @@ func HistoryRoutine() {
 			os.Exit(1)
 		}
 		fmt.Println(res)
-		time.Sleep(10 * time.Second)
+		time.Sleep(100000 * time.Second)
+		//20
 	}
 }
 
@@ -112,6 +113,7 @@ func pong(writer http.ResponseWriter, request *http.Request) {
 }
 
 func getHistory(writer http.ResponseWriter, request *http.Request) {
+	fmt.Println("client side server req")
 	db, err := sql.Open("sqlite3", file)
 	defer func(db *sql.DB) {
 		err := db.Close()
@@ -161,7 +163,7 @@ func getHistory(writer http.ResponseWriter, request *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 
 	client := http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 3000 * time.Second,
 	}
 
 	res, err := client.Do(req)
@@ -179,6 +181,9 @@ func getHistory(writer http.ResponseWriter, request *http.Request) {
 
 	body, err := ioutil.ReadAll(res.Body)
 	fmt.Println(string(body))
+
+    writer.Header().Set("Content-Type", "application/json")
+    writer.Write(body)
 }
 
 func main() {
